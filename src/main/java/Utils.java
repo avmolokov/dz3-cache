@@ -34,7 +34,7 @@ public class Utils {
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
             //cleanUpCache();
             new Thread(()->cleanUpCache()).start();
-            //создадим строку чтобы точно была уникально
+            //поидеи можно оставить только hashCode(остальное до кучи наверно будет) создадим строку чтобы точно была уникально
             StringBuilder keyBuilder = new StringBuilder();
             keyBuilder.append(obj.hashCode());
             keyBuilder.append(".");
