@@ -26,7 +26,9 @@ public class Utils {
 
         private void cleanUpCache() {
             System.out.println(" чистим не актульные");
-            cache.entrySet().removeIf(entry -> entry.getValue().notActual());
+            synchronized (cache){
+                cache.entrySet().removeIf(entry -> entry.getValue().notActual());
+            }
         }
 
 
