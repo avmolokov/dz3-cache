@@ -1,10 +1,10 @@
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Utils {
 
     public static <T> T cache(T obj) {
-        System.out.println("попали в кэш " + obj.getClass().getName() + " " + obj.getClass().getDeclaredMethods());
         InvocationHandler handler = new CacheHandler(obj);
         @SuppressWarnings("unchecked")
         T cachedObj = (T) Proxy.newProxyInstance(
@@ -17,31 +17,27 @@ public class Utils {
 
     private static class CacheHandler implements InvocationHandler {
         private final Object obj;
-        private Map<CacheKey, CacheEntry> cache;
+        private Map<CacheKey, CacheEntry> cache = new ConcurrentHashMap<>();
+        private  int setCount = 2; // кол-во вызоывов вставки изменений
+        private static final int MAXSET = 3; // после этого запускаем чистку
 
         public CacheHandler(Object obj) {
             this.obj = obj;
-            this.cache = new HashMap<>();
         }
 
         private void cleanUpCache() {
             System.out.println(" чистим не актульные");
-            synchronized (cache){
                 cache.entrySet().removeIf(entry -> entry.getValue().notActual());
-            }
         }
-
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            //cleanUpCache();
-            new Thread(()->cleanUpCache()).start();
-            //поидеи можно оставить только hashCode(остальное до кучи наверно будет) создадим строку чтобы точно была уникально
+            if (setCount >= MAXSET) {
+                setCount = 0;
+                 new Thread(()->cleanUpCache()).start();
+            }
+
             StringBuilder keyBuilder = new StringBuilder();
-            keyBuilder.append(obj.hashCode());
-            keyBuilder.append(".");
-            keyBuilder.append(obj.getClass().getName());
-            keyBuilder.append(".");
             keyBuilder.append(method.getName());
             keyBuilder.append(".");
             keyBuilder.append(Arrays.toString(args));
@@ -50,23 +46,16 @@ public class Utils {
                 field.setAccessible(true);
                 keyBuilder.append("["+field.getInt(obj)+']');
             }
-            System.out.println("  keyBuilder = " + keyBuilder.toString());
 
             CacheKey key = new CacheKey(keyBuilder.toString(), method);
             CacheEntry entry = cache.get(key);
 
             Method frMethod = obj.getClass().getDeclaredMethod(method.getName(), method.getParameterTypes());
-            if (entry == null) {
-                System.out.println("entry  пусто");
-            }
-            else {
-                System.out.println("entry  " + entry.toString());
-            }
-
 
             if (frMethod.isAnnotationPresent(Cache.class)) {
                 var lTime = frMethod.getAnnotation(Cache.class).value();
                 if (entry == null || !entry.isActual()) {
+                    setCount++;
                     System.out.println("попали в  Cache на новый расчет = ");
                     Object result = method.invoke(obj, args);
                     entry = new CacheEntry(result,lTime);
@@ -78,9 +67,6 @@ public class Utils {
                 return entry.getResult();
             }
 
-            if (frMethod.isAnnotationPresent(Mutator.class)) {
-                System.out.println("попали в  Mutator");
-            }
 
             return method.invoke(obj, args);
         }
