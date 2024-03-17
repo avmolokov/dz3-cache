@@ -18,8 +18,8 @@ public class Utils {
     private static class CacheHandler implements InvocationHandler {
         private final Object obj;
         private Map<CacheKey, CacheEntry> cache = new ConcurrentHashMap<>();
-        private  int setCount = 2; // кол-во вызоывов вставки изменений
-        private static final int MAXSET = 3; // после этого запускаем чистку
+        private  int setCount = 0; // кол-во вызоывов вставки изменений
+        private static final int MAXSET = 2; // после этого запускаем чистку
 
         public CacheHandler(Object obj) {
             this.obj = obj;
@@ -32,6 +32,7 @@ public class Utils {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            Object result = null;
             if (setCount >= MAXSET) {
                 setCount = 0;
                  new Thread(()->cleanUpCache()).start();
@@ -57,17 +58,17 @@ public class Utils {
                 if (entry == null || !entry.isActual()) {
                     setCount++;
                     System.out.println("попали в  Cache на новый расчет = ");
-                    Object result = method.invoke(obj, args);
+                    result = method.invoke(obj, args);
                     entry = new CacheEntry(result,lTime);
                     cache.put(key, entry);
                 } else {
                     System.out.println("попали в  Cache на обновения времени  ");
-                    entry.refreshExpiration(lTime);
+                    result = entry.getResult();
+                    entry = new CacheEntry(result,lTime);
+                    cache.put(key, entry);
                 }
-                return entry.getResult();
+                return result;
             }
-
-
             return method.invoke(obj, args);
         }
 
@@ -114,12 +115,6 @@ public class Utils {
             }
             public boolean notActual() {
                 return !(expirationTime == null || this.expirationTime >=  System.currentTimeMillis());
-            }
-
-            public void refreshExpiration(Integer Ltime) {
-                if (Ltime != null) {
-                    this.expirationTime = System.currentTimeMillis() + Ltime;
-                }
             }
 
             @Override
